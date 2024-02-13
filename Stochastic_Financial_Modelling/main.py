@@ -20,8 +20,39 @@ n_simulations = 100  # Définir le nombre de simulations de Monte Carlo
 cash_flows = {}
 volatility = {}
 npv_values = {}  # Pour stocker la NPV de chaque projet
+# Vérification du contenu de cash_flows
+print("Keys in cash_flows:", list(cash_flows.keys()))
+
+# Calcul déterministe de la NPV
+npv_deterministic = {}
+growth_rate = 0.05  # Taux de croissance annuel fixe pour l'exemple
 
 r = 0.03  # Taux d'actualisation
+
+# Définition des scénarios économiques
+scenarios = {
+    'haute_croissance': {'mu': 0.1, 'sigma': 0.15},
+    'récession': {'mu': -0.02, 'sigma': 0.3},
+}
+
+# Sélection aléatoire d'un scénario
+scenario_choisi = np.random.choice(list(scenarios.keys()))
+params = scenarios[scenario_choisi]
+
+# Génération des CF en fonction du scénario
+cf = np.random.normal(loc=params['mu'], scale=params['sigma'], size=n_years)
+
+for i in range(n_projects):
+    mean = np.random.randint(1, 5) * 1e6
+    std_dev = np.random.randint(1, 2) * 1e5
+    cf = np.random.normal(loc=mean, scale=std_dev, size=n_years)
+    print(f"Filling cash_flows for Project {i+1}")  # Instruction d'impression pour le débogage
+    cash_flows[f"Project {i+1}"] = cf
+
+# Affichage de la NPV déterministe pour chaque projet
+print("Deterministic NPV Values:")
+for project, npv in npv_deterministic.items():
+    print(f"{project}: $M{npv:.2f}")
 
 for i in range(n_projects):
     mean = np.random.randint(1, 5) * 1e6

@@ -1,7 +1,89 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
+import wrds
+import pandas as pd
+import warnings
 
+
+db = wrds.Connection(wrds_username='romainbastiani')
+
+# Retrieve S&P 500 index membership from CRSP
+# You would replace 'your_username' and 'your_password' with your actual WRDS credentials
+
+
+# Exécutez votre requête pour obtenir les tickers des entreprises du S&P 500
+mse = db.raw_sql("""
+                        select comnam, ncusip, namedt, nameendt, 
+                        permno, shrcd, exchcd, hsiccd, ticker
+                        from crsp.msenames
+                        """, date_cols=['namedt', 'nameendt'])
+# Créez une liste des tickers uniques
+ticker_list = mse['ticker'].dropna().unique().tolist()
+
+# Élimination des doublons en convertissant la liste en un ensemble, puis reconvertir en liste
+ticker_list = list(set(ticker_list))
+
+print(ticker_list)
+
+# Convertissez la liste des tickers en une chaîne pour la requête SQL
+tickers_str = "', '".join(ticker_list)
+
+# Interrogez Compustat pour obtenir les cash flows opérationnels
+cash_flows_query = f"""
+    select tic, datadate, fyear, oancf, ivncf, fincf
+    from comp.funda
+    where tic in ('{tickers_str}')
+    and datafmt = 'STD'
+    and consol = 'C'
+    and popsrc = 'D'
+    and indfmt = 'INDL'
+"""
+# Exécutez la requête pour obtenir les données de cash flow
+cash_flows_data = db.raw_sql(cash_flows_query)
+
+print(cash_flows_data)
+
+def recuperer_cash_flows_tickers(tickers):
+    cash_flows = pd.DataFrame()
+    for ticker in tickers:
+        query = f"""
+        SELECT tic, datadate, fyear, oancf
+        FROM comp.funda
+        WHERE tic = 'HLN'
+        AND indfmt = 'INDL'
+        AND datafmt = 'STD'
+        AND popsrc = 'D'
+        AND consol = 'C'
+        ORDER BY fyear
+        """
+        data = db.raw_sql(query)
+        
+        # Utilisez warnings.catch_warnings pour ignorer les FutureWarning spécifiques
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            # Vérifiez si 'data' est non vide et ne contient pas uniquement des NA avant de concaténer
+            if not data.empty and not data.isna().all().all():
+                cash_flows = pd.concat([cash_flows, data], ignore_index=True)
+            else:
+                print("DataFrame 'data' est vide ou entièrement NA, il sera exclu de la concaténation.")
+    
+    print(cash_flows)
+    return cash_flows
+
+# Récupérer les cash flows pour tous les tickers du S&P 500
+cash_flows_sp500 = recuperer_cash_flows_tickers(ticker_list)
+
+
+# Afficher les cash flows récupérés
+print(cash_flows_sp500.head())
+
+# N'oubliez pas de fermer la connexion après avoir fini
+db.close()
+
+  
+# Affichez les données pour vérification
+print(cash_flows_data.head())
 # Paramètres de simulation
 n_projects = 5
 n_years = 10

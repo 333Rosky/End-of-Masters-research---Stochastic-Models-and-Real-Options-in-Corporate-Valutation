@@ -90,10 +90,6 @@ final_data_cleaned['npv'] = final_data_cleaned['gvkey'].map(npv_dict)
 final_data_cleaned.to_excel('Cash_Flows_Entreprises_with_NPV.xlsx', index=False)
 print("Excel file with NPVs created successfully.")
 
-# Define the number of simulations and the number of periods
-num_simulations = 1000
-num_periods = len(cash_flows)  # Replace with the actual number of periods you have
-
 # Define the mean and standard deviation for the cash flows
 mean = np.mean(cash_flows)
 std_dev = np.std(cash_flows)

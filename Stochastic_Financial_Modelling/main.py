@@ -7,8 +7,11 @@ import numpy_financial as npf
 import tkinter as tk
 from tkinter import ttk
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import logging
+import yahoo_fin.options as op
 
+logging.basicConfig(filename='monte_carlo_simulations.log', level=logging.INFO, 
+                    format='%(asctime)s:%(levelname)s:%(message)s')
 
 def retrieve_data() :
     db = wrds.Connection(wrds_username='romainbastiani')
@@ -49,10 +52,9 @@ def retrieve_data() :
     cash_flows_data = db.raw_sql(cash_flows_query)
     final_data = pd.merge(cash_flows_data, compustat_data[['gvkey', 'conm']], on='gvkey', how='left')
     final_data_cleaned = final_data.dropna(subset=['oancfy'])
+    return tickers_str, final_data_cleaned, gvkey_list
 
-    return tickers_str, final_data_cleaned
-
-tickers_str, final_data_cleaned = retrieve_data()
+tickers_str, final_data_cleaned, gvkey_list = retrieve_data()
 
 def process_interest_rate():
     # Charger les données des taux d'intérêt
@@ -72,7 +74,6 @@ def process_interest_rate():
     interest_rate_dict = quarterly_interest_rates.to_dict()
     return interest_rate_dict
 
-
 # Exemple de fonction pour calculer la NPV pour chaque ligne
 def calculate_npv(row, interest_rate_dict):
     # Obtenir le taux d'intérêt pour le trimestre correspondant de la ligne
@@ -85,106 +86,89 @@ def calculate_npv(row, interest_rate_dict):
     npv = npf.npv(rate, [0, row['oancfy']])
     return npv
 
+
 def main():
-    
+    logging.info("Starting the main process...")
+    logging.info("Processing interest rates...")
     interest_rate_dict = process_interest_rate()
-    print("Dictionnaire des taux d'intérêt trimestriels :")
+    print("Interest rate dictionary:")
     print(interest_rate_dict)
 
-    # Supposons que final_data_cleaned est votre DataFrame avec les données nécessaires
-    # Assurez-vous que 'datadate' est au format datetime et créez une colonne 'Quarter'
+    logging.info("Preparing data...")
     final_data_cleaned['datadate'] = pd.to_datetime(final_data_cleaned['datadate'], errors='coerce')
     final_data_cleaned['Quarter'] = final_data_cleaned['datadate'].dt.to_period('Q').astype(str)
-    
-    # Ajoutez une colonne pour les taux d'intérêt en mappant avec le dictionnaire
     final_data_cleaned['interest_rate'] = final_data_cleaned['Quarter'].map(interest_rate_dict)
-    
-    # Calcul de la NPV pour chaque ligne en utilisant le taux d'intérêt et le cash flow
     final_data_cleaned['npv'] = final_data_cleaned.apply(lambda row: calculate_npv(row, interest_rate_dict), axis=1)
     
-    # Sauvegarder le DataFrame avec les calculs de NPV dans un fichier Excel
+    final_data_cleaned['Simulated_Mean_NPV'] = np.nan
+    final_data_cleaned['Simulated_SD_NPV'] = np.nan
+
+    logging.info("Retrieving options data...")
+
+    logging.info("Starting Monte Carlo simulations...")
+    for gvkey, group in final_data_cleaned.groupby('gvkey'):
+        logging.info(f"Processing gvkey: {gvkey}")
+        # Pour chaque entreprise, récupérez les taux et cash flows
+        rates = group['interest_rate'].tolist()
+        cash_flows = group['oancfy'].tolist()
+        num_periods = len(cash_flows)
+        # Exécutez la simulation de Monte Carlo pour chaque entreprise
+        simulated_mean, simulated_std = monte_carlo_simulation(cash_flows, rates, 1000, num_periods)
+
+        # Mettez à jour le DataFrame avec les résultats pour ce gvkey
+        final_data_cleaned.loc[final_data_cleaned['gvkey'] == gvkey, 'Simulated_Mean_NPV'] = simulated_mean
+        final_data_cleaned.loc[final_data_cleaned['gvkey'] == gvkey, 'Simulated_SD_NPV'] = simulated_std
+
+        logging.info(f"gvkey: {gvkey} - Simulated Mean NPV: {simulated_mean}, Simulated SD NPV: {simulated_std}")
+
+    logging.info("Simulations completed.")
+    
+    # Ajouter une colonne pour la moyenne des NPV par gvkey
+    final_data_cleaned['Mean_NPV'] = final_data_cleaned.groupby('gvkey')['npv'].transform('mean')
+
+    # Ajouter une colonne pour l'écart-type des NPV par gvkey
+    final_data_cleaned['SD_NPV'] = final_data_cleaned.groupby('gvkey')['npv'].transform('std')
+
+    logging.info("Saving results to Excel...")
+    # Maintenant, sauvegardez le DataFrame avec les nouvelles colonnes dans un fichier Excel
+    final_data_cleaned.to_excel('Cash_Flows_Entreprises_with_NPV.xlsx', index=False)
+    logging.info("Results saved.")
+
+    print("Moyenne des NPV par gvkey: ")
+    print(final_data_cleaned['Mean_NPV'])
+
+    print("Écart-type des NPV par gvkey: ")
+    print(final_data_cleaned['SD_NPV'])
+    
+    print(f"Simulated Mean NPV: {simulated_mean}")
+    print(f"Simulated SD NPV: {simulated_std}")
+     # Sauvegarde des résultats
     final_data_cleaned.to_excel('Cash_Flows_Entreprises_with_NPV.xlsx', index=False)
 
-    print(final_data_cleaned[['gvkey', 'Quarter', 'interest_rate', 'npv']].head())
+def simulate_cash_flow(mean, std, num_periods):
+    return np.random.normal(mean, std, num_periods)
+
+
+def calculate_simulated_npv(rates, cash_flows):
+    npv = 0
+    for i, cash_flow in enumerate(cash_flows):
+        npv += cash_flow / ((1 + rates[i]) ** (i + 1))
+    return npv
+
+def monte_carlo_simulation(cash_flows, rates, num_simulations, num_periods):
+    simulated_npvs = []
+    for _ in range(num_simulations):
+        # Générer des cash flows simulés pour chaque période
+        simulated_cash_flows = np.random.normal(np.mean(cash_flows), np.std(cash_flows), num_periods)
+        # Calculer la NPV pour les cash flows simulés avec les taux d'intérêt correspondants
+        simulated_npv = calculate_simulated_npv(rates, simulated_cash_flows)
+        simulated_npvs.append(simulated_npv)
+    
+    # Calculer et retourner la moyenne et l'écart-type des NPV simulées
+    mean_npv = np.mean(simulated_npvs)
+    std_npv = np.std(simulated_npvs)
+    return mean_npv, std_npv
 
 # Exécutez la fonction principale
 if __name__ == "__main__":
     main()
-
-# Define the number of simulations and periods, and the discount rate
-"""num_simulations = 1000
-num_periods = 10  # Adjust this to match the actual number of periods for your cash flows
-discount_rate = 0.05
-
-# Define a function for the Monte Carlo simulation
-def monte_carlo_simulation(mean, sd, num_periods, num_simulations, discount_rate):
-    npv_list = []
-    for i in range(num_simulations):
-        # Generate random cash flows for each period based on mean and sd
-        simulated_cash_flows = np.random.normal(mean, sd, num_periods)
-        # Calculate the NPV of the simulated cash flows
-        npv = npf.npv(discount_rate, simulated_cash_flows)
-        npv_list.append(npv)
-    # Return the mean and standard deviation of the NPVs
-    return np.mean(npv_list), np.std(npv_list)
-
-# Run the Monte Carlo simulation for each company and store the results in new columns
-final_data_cleaned['npv_mean'], final_data_cleaned['npv_sd'] = zip(*final_data_cleaned.apply(
-    lambda x: monte_carlo_simulation(
-        x['mean'], x['sd'], num_periods, num_simulations, discount_rate
-    ), axis=1
-))"""
-
-"""# Save the results to a new Excel file
-final_data_cleaned.to_excel('Cash_Flows_Entreprises_with_NPV.xlsx', index=False)"""
-
-"""# Function to update the plot based on selected companies
-def update_plot():
-    global canvas  # Add this line to use the 'canvas' variable defined outside the function
-    selected_indices = list(map(int, lb.curselection()))
-    selected_companies = [lb.get(i) for i in selected_indices]
-    selected_data = final_data_cleaned[final_data_cleaned['conm'].isin(selected_companies)]
-
-    fig, ax = plt.subplots()
-    for company in selected_companies:
-        company_data = selected_data[selected_data['conm'] == company]
-        ax.errorbar(company_data['npv_mean'], company_data['npv_sd'], fmt='o', label=company)
-
-    ax.set_title('Mean NPV with Standard Deviation from Monte Carlo Simulation')
-    ax.set_xlabel('Company')
-    ax.set_ylabel('Net Present Value (NPV)')
-    ax.legend()
-
-    # Check if 'canvas' exists before trying to pack it away
-    if canvas is not None:
-        canvas.get_tk_widget().pack_forget()
-    
-    # Create a new canvas for the new figure
-    canvas = FigureCanvasTkAgg(fig, master=root) 
-    canvas.get_tk_widget().pack()
-    canvas.draw()
-
-# Create the main Tkinter window
-root = tk.Tk()
-root.title('Monte Carlo Simulation Data Plotter')
-
-# Create a listbox to select companies
-lb = tk.Listbox(root, selectmode='multiple', exportselection=0)
-for company in final_data_cleaned['conm'].unique():
-    lb.insert(tk.END, company)
-lb.pack(side='left', fill='y')
-
-# Create a scrollbar for the listbox
-scrollbar = ttk.Scrollbar(root, orient='vertical', command=lb.yview)
-scrollbar.pack(side='left', fill='y')
-lb.config(yscrollcommand=scrollbar.set)
-
-# Create a button to update the plot
-plot_button = ttk.Button(root, text='Plot Data', command=update_plot)
-plot_button.pack(side='top')
-
-# Placeholder for the matplotlib figure canvas
-canvas = None
-
-# Start the Tkinter event loop
-root.mainloop()"""

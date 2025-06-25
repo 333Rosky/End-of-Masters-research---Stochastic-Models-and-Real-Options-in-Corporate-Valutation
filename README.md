@@ -314,7 +314,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ```
 Bastiani, R. (2024). Stochastic Models and Real Options in Corporate Valuation. 
 Master's Thesis, NEOMA Business School, Rouen, France.
-Available at: https://github.com/333Rosky/End-of-Masters-research---Stochastic-Models-and-Real-Options-in-Corporate-Valutation
+Available at: https://github.com/333Rosky/stochastic-real-options
 ```
 
 ---

@@ -1,0 +1,71 @@
+# Configuration File for Stochastic Financial Modeling Project
+# Copy this file to config.yaml and customize with your settings
+
+# Database Configuration
+database:
+  wrds_username: "your_username_here"
+  connection_timeout: 30
+  max_retries: 3
+  
+# Monte Carlo Simulation Parameters
+simulation:
+  default_runs: 1000
+  max_runs: 10000
+  seed: 42
+  confidence_levels: [0.90, 0.95, 0.99]
+  
+# Data Processing Settings
+data_processing:
+  outlier_threshold: 3.0  # Standard deviations for outlier removal
+  winsorize_percentiles: [0.01, 0.99]
+  min_observations_per_company: 4
+  
+# File Paths
+paths:
+  data_raw: "data/raw/"
+  data_processed: "data/processed/"
+  results: "results/"
+  logs: "logs/"
+  
+# Output Settings
+output:
+  decimal_places: 4
+  currency_format: "USD"
+  date_format: "%Y-%m-%d"
+  excel_engine: "openpyxl"
+  
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "logs/monte_carlo_simulations.log"
+  format: "%(asctime)s:%(levelname)s:%(message)s"
+  
+# Performance Settings
+performance:
+  chunk_size: 10000  # For large dataset processing
+  parallel_processes: 4  # Number of CPU cores to use
+  memory_limit_gb: 8  # Maximum memory usage
+  
+# Research Settings
+research:
+  study_period_start: "2015-01-01"
+  study_period_end: "2023-12-31"
+  risk_free_rate_source: "US_3M_Treasury"
+  
+# Visualization Settings
+visualization:
+  figure_size: [12, 8]
+  dpi: 300
+  style: "seaborn-v0_8"
+  color_palette: "husl"
+  save_formats: ["png", "pdf"]
+  
+# Academic Settings
+academic:
+  institution: "NEOMA Business School"
+  department: "PGE Corporate Finance"
+  thesis_title: "Stochastic Models and Real Options in Corporate Valuation"
+  author: "Romain Bastiani"
+  supervisor: "Pierre SIX"
+  defense_date: "2024-06-18"
+  location: "Rouen, France" 
